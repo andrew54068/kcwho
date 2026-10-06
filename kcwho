@@ -1,0 +1,282 @@
+#!/usr/bin/python3
+"""kcwho: who is behind the keychain password popup on screen right now?
+
+Run it in Terminal on this Mac while the popup is showing. Read-only:
+it never touches the keychain and never stops anything.
+
+    kcwho              # report OS-identified direct Keychain requesters
+    kcwho "Some App"   # include this executable in diagnostic candidates
+    kcwho --json       # the same report as JSON (kcwatch reads this)
+"""
+import ctypes
+import json
+import os
+import re
+import subprocess
+import sys
+from datetime import datetime
+
+# Apple's keychain-password-prompt programs, on the sealed read-only system volume.
+GENUINE = {
+    "SecurityAgent": "/System/Library/Frameworks/Security.framework/Versions/A/"
+                     "MachServices/SecurityAgent.bundle/Contents/MacOS/SecurityAgent",
+    "coreautha": "/System/Library/Frameworks/LocalAuthentication.framework/"
+                 "Support/coreautha.bundle/Contents/MacOS/coreautha",
+}
+ICLOUD_HELPER = "/System/Library/PrivateFrameworks/AOSKit.framework/Versions/A/" \
+                "XPCServices/com.apple.iCloudHelper.xpc/Contents/MacOS/com.apple.iCloudHelper"
+SECURITYD = "/usr/sbin/securityd"
+# On-screen windows big enough to be a dialog, as "pid<TAB>owner" lines.
+WINDOWS_JXA = r'''
+ObjC.import("CoreGraphics");
+ObjC.deepUnwrap(ObjC.castRefToObject($.CGWindowListCopyWindowInfo(1, 0)))
+  .filter(w => w.kCGWindowAlpha > 0 && w.kCGWindowBounds.Width >= 150 && w.kCGWindowBounds.Height >= 80)
+  .map(w => w.kCGWindowOwnerPID + "\t" + w.kCGWindowOwnerName).join("\n")
+'''
+
+libproc = ctypes.CDLL("/usr/lib/libproc.dylib")
+
+def run(*cmd, **kwargs):
+    return subprocess.run(cmd, capture_output=True, text=True, **kwargs)
+
+
+def exe(pid):
+    buf = ctypes.create_string_buffer(4096)
+    return buf.value.decode() if libproc.proc_pidpath(pid, buf, 4096) > 0 else "?"
+
+
+def all_pids():
+    n = libproc.proc_listallpids(None, 0)
+    pids = (ctypes.c_int * (n + 100))()
+    n = libproc.proc_listallpids(pids, ctypes.sizeof(pids))
+    return [p for p in pids[:max(n, 0)] if p > 0]
+
+
+def log_time(value):
+    for format in ("%Y-%m-%d %H:%M:%S.%f%z", "%Y-%m-%d %H:%M:%S%z"):
+        try:
+            return datetime.strptime(value, format).timestamp()
+        except (TypeError, ValueError):
+            pass
+    return None
+
+
+def process_info(pid):
+    """Kernel process birth time and dynamic signing metadata, without task access."""
+    here = os.path.dirname(os.path.realpath(__file__))
+    probe = os.path.join(here, "Keychain Popup Watch")
+    if not os.path.exists(probe):
+        probe = os.path.join(here, "build", "kcwatch")
+    try:
+        result = run(probe, "--process-info", str(pid), timeout=3)
+        info = json.loads(result.stdout)
+        return info if result.returncode == 0 and isinstance(info, dict) else None
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return None
+
+
+def prompt_queries(events, boot, uid, daemon_pids=None):
+    """Read securityd's per-prompt caller and query lifetime, not helper activity.
+
+    The display notice and query constructor are consecutive in the same daemon
+    thread in Apple's request path. A query destructor closes the exact object.
+    This identifies a system-reported request, not an individual CG window ID.
+    """
+    records = []
+    for row in events:
+        if not isinstance(row, dict):
+            continue
+        if row.get("eventType") == "lossEvent":
+            raise ValueError("system log events were lost")
+        stamp = log_time(row.get("timestamp"))
+        if (row.get("processImagePath") == SECURITYD and row.get("bootUUID") == boot
+                and (daemon_pids is None or row.get("processID") in daemon_pids)
+                and stamp is not None and row.get("threadID") is not None):
+            records.append((stamp, row))
+    contexts, active = {}, {}
+    monotonic = records and all(isinstance(row.get("machTimestamp"), int) for _, row in records)
+    for stamp, row in sorted(records, key=lambda r: r[1]["machTimestamp"] if monotonic else r[0]):
+        message = row.get("eventMessage", "")
+        if not isinstance(message, str):
+            continue
+        thread = (row.get("processID"), row["threadID"])
+        category = row.get("category")
+        query = re.fullmatch(r"Keychain query for process (\d+) \(UID (\d+)\)", message)
+        display = re.match(r"displaying keychain prompt for (.*?)\((\d+)\); ACL:", message)
+        begin = re.fullmatch(r"new SecurityAgentXPCQuery\((0x[0-9a-fA-F]+)\)", message)
+        end = re.fullmatch(r"SecurityAgentXPCQuery\((0x[0-9a-fA-F]+)\) dying", message)
+        if category == "kcacl" and query:
+            contexts[thread] = {"pid": int(query[1]), "uid": int(query[2]), "time": stamp}
+        elif category == "kcacl" and display:
+            context = contexts.get(thread)
+            if context and context["pid"] == int(display[2]) and 0 <= stamp - context["time"] <= 2:
+                context.update(path=display[1], displayed=stamp)
+            else:
+                contexts.pop(thread, None)
+        elif category == "SecurityAgentXPCQuery" and begin:
+            context = contexts.pop(thread, None)
+            key = (row.get("processID"), begin[1])
+            active.pop(key, None)  # a reused pointer must never retain an older requester
+            if context and context["uid"] != uid:
+                continue
+            if context and "displayed" in context and 0 <= stamp - context["displayed"] <= 2:
+                active[key] = dict(context, query_id=f"{boot}:{key[0]}:{key[1]}:{stamp}")
+            else:
+                active[key] = None  # e.g. unlock prompts without a published caller PID
+        elif category == "SecurityAgentXPCQuery" and end:
+            active.pop((row.get("processID"), end[1]), None)
+    return [q for q in active.values() if q is not None], sum(q is None for q in active.values())
+
+
+def collect(name=None):
+    """Everything kcwho reports, as plain data."""
+    out = run("/usr/bin/osascript", "-l", "JavaScript", "-e", WINDOWS_JXA).stdout
+    windows = [(int(p), o) for p, o in (l.split("\t", 1) for l in out.splitlines() if "\t" in l)]
+    if not windows:
+        sys.exit("Can't see the screen from here (SSH?). Run kcwho in Terminal on this Mac.")
+
+    popups = [owner for pid, owner in windows if owner in GENUINE and exe(pid) == GENUINE[owner]]
+
+    parents = {}
+    for line in run("/bin/ps", "-axo", "pid=,ppid=").stdout.splitlines():
+        pid, ppid = map(int, line.split())
+        parents[pid] = ppid
+    starts = {}  # used to reject logs from an older instance of a reused PID
+    for line in run("/bin/ps", "-axo", "pid=,lstart=").stdout.splitlines():
+        head, _, rest = line.strip().partition(" ")
+        if head.isdigit() and rest:
+            try:
+                starts[int(head)] = datetime.strptime(" ".join(rest.split()), "%a %b %d %H:%M:%S %Y").timestamp()
+            except ValueError:
+                pass
+    jobs = {}
+    for line in run("/bin/launchctl", "list").stdout.splitlines()[1:]:
+        cols = line.split("\t")
+        if len(cols) == 3 and cols[0].isdigit():
+            jobs[int(cols[0])] = cols[2]
+
+    def job(pid):  # nearest launchd job at or above pid
+        while pid > 1:
+            if pid in jobs:
+                return jobs[pid]
+            pid = parents.get(pid, 0)
+        return None
+
+    candidates = []
+    for pid in all_pids():
+        path = exe(pid)
+        if not (os.path.basename(path) == name if name else
+                (os.path.basename(path) == "security" or path == ICLOUD_HELPER)):
+            continue
+        # Diagnostic context only. Never inspect command lines: they may contain secrets.
+        candidates.append({
+            "wants": "Not linked to a prompt", "job": job(pid), "from": path,
+            "chain": [os.path.basename(path)], "orphan": False,
+            "tool": path, "started": starts.get(pid), "pid": pid,
+        })
+    waiting, trace_error, kind = [], None, "none"
+    if popups:
+        predicate = ('processImagePath == "' + SECURITYD + '" AND '
+                     '(category == "kcacl" OR category == "SecurityAgentXPCQuery")')
+        try:
+            boot = run("/usr/sbin/sysctl", "-n", "kern.bootsessionuuid").stdout.strip()
+            if not boot:
+                raise ValueError("boot identity unavailable")
+            host_starts = [starts[p] for p, owner in windows if owner in GENUINE and p in starts]
+            if not host_starts:
+                raise ValueError("dialog host birth time unavailable")
+            logs = run("/usr/bin/log", "show", "--style", "json", "--start",
+                       "@" + str(int(min(host_starts) - 60)), "--loss",
+                       "--predicate", predicate, timeout=8)
+            events = json.loads(logs.stdout) if logs.returncode == 0 else None
+            if not isinstance(events, list):
+                raise ValueError("system prompt logs unavailable")
+            daemons = {pid for pid in all_pids() if exe(pid) == SECURITYD}
+            if not daemons:
+                raise ValueError("current security daemon identity unavailable")
+            queries, unresolved = prompt_queries(events, boot, os.getuid(), daemons)
+            for q in queries:
+                info = process_info(q["pid"])
+                birth = info.get("started") if info else None
+                if (not info or info.get("pid") != q["pid"] or not isinstance(birth, (int, float))
+                        or birth > q["displayed"]):
+                    unresolved += 1
+                    continue
+                path = info.get("path", "")
+                if not isinstance(path, str) or not os.path.isabs(path):
+                    unresolved += 1
+                    continue
+                reported = q["path"]
+                if reported != "<private>" and path != reported and not (
+                        reported.endswith(".app") and path.startswith(reported + "/Contents/")):
+                    unresolved += 1
+                    continue
+                helper = path == ICLOUD_HELPER
+                waiting.append({
+                    "requester": "iCloud Helper" if helper else os.path.basename(path),
+                    "pid": q["pid"], "tool": path, "started": q["displayed"],
+                    "wants": "Keychain access", "via": None,
+                    "job": job(q["pid"]), "from": path, "chain": [os.path.basename(path)], "orphan": False,
+                    "query_id": q["query_id"], "source": "securityd", "window_association": "not established",
+                    "evidence": f"macOS securityd reported a Keychain prompt for PID {q['pid']}",
+                    "signing": info.get("signing", "Not checked"),
+                    "origin_note": "Originating app behind iCloud Helper is not verified" if helper else None,
+                })
+            kind = "keychain" if waiting else "unknown" if unresolved else "none"
+            if unresolved:
+                trace_error = "Some native security queries have no verifiable caller details"
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            trace_error, kind = "System prompt evidence unavailable", "unknown"
+    return {"name": name or "auto", "popups": popups, "waiting": waiting,
+            "candidates": candidates, "trace_error": trace_error, "kind": kind}
+
+
+def render(report):
+    popups, waiting = report["popups"], report["waiting"]
+    if popups:
+        print(f'Authentication dialog on screen (Apple\'s {", ".join(sorted(set(popups)))}).')
+    if not popups:
+        print("No authentication dialog on screen.")
+    elif not waiting:
+        print("\nRequester not determined.")
+    for i, w in enumerate(waiting, 1):
+        print(f"\n  {i}. {w['requester']} (PID {w['pid']})\n     wants  {w['wants']}")
+        print(f"     tool   {w['tool']}\n     signing of current process: {w['signing']}")
+        print(f"     source {w['evidence']}")
+        print(f"     query  {w['query_id']}")
+        if w["origin_note"]:
+            print("     " + w["origin_note"])
+    if len(waiting) > 1:
+        print("\nMultiple native requests; individual dialog association is not established.")
+    if report.get("trace_error"):
+        print(report["trace_error"] + ".")
+    candidates = report.get("candidates", [])
+    if candidates:
+        print(f"\n{len(candidates)} running client(s), not individually linked to this dialog:")
+        seen = set()
+        for w in candidates:
+            detail = (w["wants"], w["job"], w["from"], w["tool"])
+            if detail in seen:
+                continue
+            seen.add(detail)
+            print(f"  candidate: {w['job'] or w['from'] or 'unknown'} — {w['wants']}")
+            print(f"     tool   {w['tool']}")
+    if popups:
+        print("\nCheck the macOS dialog's requester. If unsure, press Cancel.")
+
+
+def main():
+    args = sys.argv[1:]
+    if args and args[0] in ("-h", "--help"):
+        sys.exit(__doc__)
+    as_json = "--json" in args
+    args = [a for a in args if a != "--json"]
+    report = collect(args[0] if args else None)
+    if as_json:
+        print(json.dumps(report))  # ASCII-only: safe whatever locale the caller runs in
+    else:
+        render(report)
+
+
+if __name__ == "__main__":
+    main()

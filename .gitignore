@@ -1,0 +1,30 @@
+# Local agent skills contain machine-specific absolute paths.
+.agents/skills/
+.claude/skills/
+
+# Local diagnostics, screenshots, test evidence, and compiled binaries.
+/build/
+.DS_Store
+
+# Secret files and local configuration.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+id_rsa
+id_ed25519
+.netrc
+credentials
+secrets.*
+
+# Keychains, logs, Python caches, and local previews.
+*.keychain
+*.keychain-db
+*.log
+__pycache__/
+*.py[cod]
+.venv/
+.lavish/
