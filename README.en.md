@@ -14,7 +14,7 @@ kcwho reports the **direct requester identified by macOS**, its PID, executable 
 
 ## Build and run
 
-Requirements: macOS, Apple's Command Line Tools (`swiftc`, Python 3), and a logged-in desktop session. The current implementation was tested on macOS 15.7.4 (Apple silicon); other versions are unverified. There are no third-party runtime packages.
+Requirements: macOS, Apple's Command Line Tools (`xcode-select --install`) or Xcode, Python 3, and a logged-in desktop session. The current implementation was tested on macOS 15.7.4 (Apple silicon); other versions are unverified. There are no third-party runtime packages.
 
 ```bash
 git clone https://github.com/andrew54068/kcwho.git
@@ -23,6 +23,8 @@ scripts/install.sh build
 ./kcwho
 ./kcwho --json
 ```
+
+The build uses Apple's Swift compiler and macOS SDK via `/usr/bin/xcrun --sdk macosx --toolchain default`. Swiftly and a specific Swift release are not required; a broken Swiftly selection on your `PATH` does not block the build. The installer does not change your global toolchain selection.
 
 Run in Terminal on the Mac displaying the dialog. SSH and background sessions may not expose the same windows or Keychain interaction state.
 
@@ -71,10 +73,13 @@ CLI output and local status logs can contain executable paths, process names, an
 
 ```bash
 /usr/bin/python3 scripts/test_kcwho.py
+/usr/bin/python3 scripts/test_install.py
 scripts/install.sh build
 bash -n scripts/install.sh
 ```
 
 The regression fixtures are sanitized examples of captured securityd message shapes. They test stale helper activity, unrelated prompts, unknown clients, query lifetime, multiple requests, PID reuse, source/boot checks, missing evidence, and argument privacy. They do not replace live native-dialog testing. See [docs/verification.md](docs/verification.md) for the manual protocol and tested limits.
+
+Installer tests build in a temporary directory with a broken Swiftly-style shim and check missing developer-tool guidance; they do not install or start an agent.
 
 Report ordinary bugs or questions through [GitHub issues](https://github.com/andrew54068/kcwho/issues). For vulnerabilities, see [SECURITY.md](SECURITY.md). Development guidance is in [CONTRIBUTING.md](CONTRIBUTING.md); participants follow the [Code of Conduct](CODE_OF_CONDUCT.md).

@@ -37,9 +37,15 @@ USAGE
 command -v launchctl >/dev/null 2>&1 || { echo "ERROR: launchctl not available"; exit 1; }
 
 build() {
-  command -v swiftc >/dev/null 2>&1 || { echo "ERROR: swiftc not found (run: xcode-select --install)"; exit 1; }
+  # Use Apple's compiler and macOS SDK, bypassing PATH shims (e.g. Swiftly)
+  # and custom TOOLCHAINS/SDKROOT settings from the user's shell.
+  if ! /usr/bin/xcrun --sdk macosx --toolchain default --find swiftc >/dev/null 2>&1; then
+    echo "ERROR: Apple's Swift compiler is unavailable. Install Command Line Tools: xcode-select --install" >&2
+    echo "If already installed, check DEVELOPER_DIR and select the tools with sudo xcode-select --switch /Library/Developer/CommandLineTools (or your Xcode Contents/Developer directory)." >&2
+    exit 1
+  fi
   mkdir -p "$PROJECT_DIR/build"
-  swiftc -O -swift-version 5 -o "$BUILT" "$PROJECT_DIR/kcwatch.swift"
+  /usr/bin/xcrun --sdk macosx --toolchain default swiftc -O -swift-version 5 -o "$BUILT" "$PROJECT_DIR/kcwatch.swift"
   echo "Built: $BUILT"
 }
 

@@ -14,7 +14,7 @@ kcwho 會回報 **macOS 識別出的直接要求者**、其行程識別碼（PID
 
 ## 建置與執行
 
-環境需求：macOS、Apple 的命令列工具（Command Line Tools，包含 `swiftc` 與 Python 3），以及已登入的桌面工作階段。目前版本已在 macOS 15.7.4（Apple 晶片）上測試，其他版本尚未驗證。執行時不需要任何第三方套件。
+環境需求：macOS、Apple 的命令列工具（Command Line Tools，可用 `xcode-select --install` 安裝）或 Xcode、Python 3，以及已登入的桌面工作階段。目前版本已在 macOS 15.7.4（Apple 晶片）上測試，其他版本尚未驗證。執行時不需要任何第三方套件。
 
 ```bash
 git clone https://github.com/andrew54068/kcwho.git
@@ -23,6 +23,8 @@ scripts/install.sh build
 ./kcwho
 ./kcwho --json
 ```
+
+建置會透過 `/usr/bin/xcrun --sdk macosx --toolchain default` 使用 Apple 的 Swift 編譯器與 macOS SDK。無須安裝 Swiftly 或特定 Swift 版本；即使 `PATH` 上的 Swiftly 選用設定故障，也不會阻擋建置。安裝腳本不會更動全域工具鏈選用設定。
 
 請在顯示對話框的那台 Mac 上，使用「終端機」執行。透過 SSH 或背景工作階段執行時，可能無法取得相同的視窗或鑰匙圈互動狀態。
 
@@ -71,10 +73,13 @@ kcwho 無法在所有情況下提供毫無疑義的要求來源判定。請將�
 
 ```bash
 /usr/bin/python3 scripts/test_kcwho.py
+/usr/bin/python3 scripts/test_install.py
 scripts/install.sh build
 bash -n scripts/install.sh
 ```
 
 迴歸測試資料取自實際擷取的 `securityd` 訊息格式範例，且已移除敏感資訊。測試涵蓋過期的輔助程式活動、無關的提示、未知的用戶端、查詢生命週期、多項要求、PID 重複使用、來源與開機狀態檢查、證據缺漏，以及引數隱私。這些測試不能取代實際原生對話框的測試。手動驗證流程與已測試的限制，請參閱 [驗證說明](docs/verification.md)。
+
+安裝腳本測試會在暫存目錄中建置，確認 `PATH` 上故障的 Swiftly 模擬程式不會阻擋建置，並檢查缺少開發工具時的操作指引。測試不會安裝或啟動代理程式。
 
 一般錯誤或問題請透過 [GitHub Issues](https://github.com/andrew54068/kcwho/issues) 回報。資安漏洞的回報方式請參閱 [安全性政策](SECURITY.md)。開發指引請參閱 [貢獻指南](CONTRIBUTING.md)；所有參與者都應遵守 [行為準則](CODE_OF_CONDUCT.md)。

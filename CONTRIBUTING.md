@@ -8,6 +8,7 @@ Use macOS with Apple's Command Line Tools. Python uses only its standard library
 
 ```bash
 /usr/bin/python3 scripts/test_kcwho.py
+/usr/bin/python3 scripts/test_install.py
 scripts/install.sh build
 bash -n scripts/install.sh
 build/kcwatch --kcwho "$PWD/kcwho"
