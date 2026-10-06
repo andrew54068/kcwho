@@ -1,4 +1,8 @@
-# kcwho
+<p align="center">
+  <img src="docs/assets/kcwho-banner.svg" alt="kcwho — See who’s asking. Read-only diagnostics for macOS Keychain requests." width="100%">
+</p>
+
+<h1><img src="docs/assets/kcwho-icon.svg" alt="" width="40" height="40"> kcwho</h1>
 
 Read-only diagnostics for macOS Keychain permission requests, with a native panel beside authentication dialogs.
 

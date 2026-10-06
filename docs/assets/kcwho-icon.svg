@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">kcwho icon</title>
+  <desc id="desc">A mint observation lens surrounding a keyhole on a graphite rounded square. Identify a Keychain requester without authorizing access.</desc>
+  <defs>
+    <linearGradient id="tile" x1="64" y1="24" x2="433" y2="488" gradientUnits="userSpaceOnUse"><stop stop-color="#253B43"/><stop offset=".52" stop-color="#10252D"/><stop offset="1" stop-color="#09191F"/></linearGradient>
+    <linearGradient id="edge" x1="120" y1="24" x2="361" y2="488" gradientUnits="userSpaceOnUse"><stop stop-color="#829A9B" stop-opacity=".6"/><stop offset=".45" stop-color="#49676D" stop-opacity=".2"/><stop offset="1" stop-color="#263F47" stop-opacity=".5"/></linearGradient>
+    <linearGradient id="metal" x1="141" y1="109" x2="380" y2="392" gradientUnits="userSpaceOnUse"><stop stop-color="#E1FFF2"/><stop offset=".38" stop-color="#B2F2D6"/><stop offset=".72" stop-color="#6ACDB5"/><stop offset="1" stop-color="#42A791"/></linearGradient>
+    <linearGradient id="glass" x1="145" y1="115" x2="318" y2="354" gradientUnits="userSpaceOnUse"><stop stop-color="#345A5E"/><stop offset=".52" stop-color="#183A42"/><stop offset="1" stop-color="#102B33"/></linearGradient>
+    <linearGradient id="keyhole" x1="211" y1="181" x2="259" y2="298" gradientUnits="userSpaceOnUse"><stop stop-color="#F3FFF7"/><stop offset="1" stop-color="#B5F3D6"/></linearGradient>
+    <radialGradient id="light" cx="0" cy="0" r="1" gradientTransform="translate(287 355) rotate(90) scale(256)" gradientUnits="userSpaceOnUse"><stop stop-color="#4AB899" stop-opacity=".13"/><stop offset="1" stop-color="#4AB899" stop-opacity="0"/></radialGradient>
+    <filter id="shadow" x="55" y="70" width="405" height="410" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="12"/></filter>
+    <clipPath id="tile-clip"><path d="M157 24H355C451 24 488 61 488 157V355C488 451 451 488 355 488H157C61 488 24 451 24 355V157C24 61 61 24 157 24Z"/></clipPath>
+  </defs>
+  <path d="M157 24H355C451 24 488 61 488 157V355C488 451 451 488 355 488H157C61 488 24 451 24 355V157C24 61 61 24 157 24Z" fill="url(#tile)"/>
+  <g clip-path="url(#tile-clip)"><rect x="24" y="24" width="464" height="464" fill="url(#light)"/><path d="M55 389C177 468 348 450 458 319" stroke="#75C8B3" stroke-opacity=".06" stroke-width="1.5"/></g>
+  <path d="M157 25H355C450 25 487 62 487 157V355C487 450 450 487 355 487H157C62 487 25 450 25 355V157C25 62 62 25 157 25Z" stroke="url(#edge)" stroke-width="2"/>
+  <g opacity=".5" filter="url(#shadow)"><circle cx="232" cy="248" r="128" fill="#020E14"/><path d="M320 335L389 404" stroke="#020E14" stroke-width="55" stroke-linecap="round"/></g>
+  <path d="M322 324L390 392" stroke="url(#metal)" stroke-width="47" stroke-linecap="round"/>
+  <path d="M333 321L400 388" stroke="#DAFFEA" stroke-opacity=".38" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="232" cy="231" r="124" fill="url(#glass)" stroke="url(#metal)" stroke-width="29"/>
+  <circle cx="232" cy="231" r="107.5" stroke="#D0FFE8" stroke-opacity=".15"/>
+  <path d="M128 197A110 110 0 0 1 270 127" stroke="#F0FFF4" stroke-opacity=".26" stroke-width="2" stroke-linecap="round"/>
+  <path d="M232 179C209.9 179 192 196.9 192 219C192 233.7 199.9 246.6 211.7 253.6L201 285C199 291 203 297 209 297H255C261 297 265 291 263 285L252.3 253.6C264.1 246.6 272 233.7 272 219C272 196.9 254.1 179 232 179Z" fill="url(#keyhole)"/>
+</svg>
