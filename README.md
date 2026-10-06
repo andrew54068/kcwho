@@ -1,16 +1,20 @@
 <p align="center">
-  <img src="docs/assets/kcwho-banner.svg" alt="kcwho — See who’s asking. Read-only diagnostics for macOS Keychain requests." width="100%">
+  <img src="docs/assets/kcwho-banner.svg" alt="kcwho — 看清楚是誰要求存取。macOS 鑰匙圈唯讀診斷工具。" width="100%">
+</p>
+
+<p align="center">
+  <strong>繁體中文（台灣）</strong> · <a href="README.en.md">English</a>
 </p>
 
 <h1><img src="docs/assets/kcwho-icon.svg" alt="" width="40" height="40"> kcwho</h1>
 
-Read-only diagnostics for macOS Keychain permission requests, with a native panel beside authentication dialogs.
+以唯讀方式診斷 macOS「鑰匙圈」的存取權限要求，並在驗證對話框旁顯示原生面板。
 
-kcwho reports the **direct requester identified by macOS**, its PID, executable path, and current signing status. It does not decide whether a request is safe to approve.
+kcwho 會回報 **macOS 識別出的直接要求者**、其行程識別碼（PID）、執行檔路徑，以及目前的程式碼簽署狀態。它不會判定允許這項要求是否安全。
 
-## Build and run
+## 建置與執行
 
-Requirements: macOS, Apple's Command Line Tools (`swiftc`, Python 3), and a logged-in desktop session. The current implementation was tested on macOS 15.7.4 (Apple silicon); other versions are unverified. There are no third-party runtime packages.
+環境需求：macOS、Apple 的命令列工具（Command Line Tools，包含 `swiftc` 與 Python 3），以及已登入的桌面工作階段。目前版本已在 macOS 15.7.4（Apple 晶片）上測試，其他版本尚未驗證。執行時不需要任何第三方套件。
 
 ```bash
 git clone https://github.com/andrew54068/kcwho.git
@@ -20,50 +24,50 @@ scripts/install.sh build
 ./kcwho --json
 ```
 
-Run in Terminal on the Mac displaying the dialog. SSH and background sessions may not expose the same windows or Keychain interaction state.
+請在顯示對話框的那台 Mac 上，使用「終端機」執行。透過 SSH 或背景工作階段執行時，可能無法取得相同的視窗或鑰匙圈互動狀態。
 
-For the panel without installing a login agent:
+若只想顯示面板，不安裝登入時啟動的代理程式（LaunchAgent）：
 
 ```bash
 build/kcwatch --kcwho "$PWD/kcwho"
 ```
 
-To run the watcher now and at each desktop login:
+若要立即啟動觀察程式，並在每次登入桌面時自動執行：
 
 ```bash
 scripts/install.sh install
 scripts/install.sh status
-# Stop and remove the installed observer:
+# 停止並移除已安裝的觀察程式：
 scripts/install.sh uninstall
 ```
 
-The installer builds locally, copies the programs to `~/Library/Application Support/com.dawson.kcwatch/`, and registers `~/Library/LaunchAgents/com.dawson.kcwatch.plist`. Status messages go to `~/Library/Logs/kcwatch.log`. Reinstall after changing source; the agent runs its installed copies.
+安裝腳本會在本機建置，將程式複製到 `~/Library/Application Support/com.dawson.kcwatch/`，並註冊 `~/Library/LaunchAgents/com.dawson.kcwatch.plist`。狀態訊息會寫入 `~/Library/Logs/kcwatch.log`。修改原始碼後，請重新安裝；代理程式執行的是已安裝的副本。
 
-## What the result means
+## 如何解讀結果
 
-The panel lists active **OS-reported Keychain requests**. Its JSON report uses `kind: "keychain"` when a direct requester can be verified, `"unknown"` when relevant evidence is incomplete or unavailable, and `"none"` when it found no active Keychain query. `none` does not certify that a dialog is harmless or identify what it is asking for.
+面板會列出目前有效的 **作業系統回報的鑰匙圈要求**。JSON 報告在能驗證直接要求者時，使用 `kind: "keychain"`；相關證據不完整或無法取得時，使用 `"unknown"`；未找到仍有效的鑰匙圈查詢時，則使用 `"none"`。`none` 不代表對話框沒有風險，也不表示已識別出它要求的內容。
 
-The requester comes from securityd's explicit `displaying keychain prompt` event. A matching query PID, user, daemon thread, and query construction event establish an OS-reported request. Query destruction removes it. The parser filters the current boot and daemon instance, then checks the live executable and kernel process birth time to reject PID reuse.
+要求者資訊來自 `securityd` 明確的 `displaying keychain prompt` 事件。查詢的 PID、使用者、背景常駐程式的執行緒，以及查詢建立事件必須相互吻合，才能確認這是一項由作業系統回報的要求。查詢銷毀時，對應的要求也會移除。解析器只採用本次開機、目前背景常駐程式執行個體的事件，再檢查目前執行中的執行檔，以及核心記錄的行程建立時間，以排除 PID 重複使用造成的誤判。
 
-Signing describes the **current process identity**, not its intent or the safety of approving access. Diagnostic running-process candidates are separate from requester evidence and contain no command-line arguments.
+簽署資訊描述的是 **目前的行程身分**，不是行程的意圖，也不是允許存取是否安全。供診斷參考的執行中行程候選項目，會與要求者證據分開列示，且不包含命令列引數。
 
-## Limits
+## 限制
 
-- The system log format is an implementation detail, not a stable public observation API. Missing, redacted, lost, or changed events can make attribution unavailable. Logs may be incomplete without an explicit loss marker.
-- Some prompts, including whole-Keychain unlock requests, publish no caller PID and remain unknown.
-- An individual CoreGraphics window is **not bound** to a query object. Multiple active requests are listed separately; the panel cannot tell which belongs to a particular window.
-- If iCloud Helper is the direct requester, the original app behind it remains unverified. Historical Reminders or Contacts account lookups do not prove ownership of the current request.
-- Process identity and request ownership are different facts. A running process, Apple signature, parent process, or launchd job alone is not requester evidence.
+- 系統記錄格式屬於實作細節，並非穩定、公開的觀測 API。事件缺漏、內容遭遮蔽、記錄遺失或格式變更，都可能使要求來源無法確認。即使沒有明確標示記錄遺失，記錄仍可能不完整。
+- 部分提示（包括解鎖整個鑰匙圈的要求）不會提供呼叫端的 PID，因此仍會顯示為未知。
+- 個別 CoreGraphics 視窗 **不會與查詢物件綁定**。若同時有多項有效要求，面板會分別列出，但無法判定哪一項屬於特定視窗。
+- 若直接要求者是 iCloud Helper，背後最初發起要求的 App 仍無法驗證。過去「提醒事項」或「聯絡人」的帳號查詢，無法證明它們就是目前要求的來源。
+- 行程身分與要求歸屬是不同的事實。單憑執行中的行程、Apple 簽章、父行程或 `launchd` 工作，都不足以作為要求者證據。
 
-kcwho cannot provide universally airtight attribution. Compare the reported evidence with the macOS dialog, and cancel requests whose purpose you do not recognize.
+kcwho 無法在所有情況下提供毫無疑義的要求來源判定。請將回報的證據與 macOS 對話框比對；若不清楚要求的用途，請取消該要求。
 
-## Privacy
+## 隱私
 
-The observer reads window owner/position metadata, selected local system logs, and process identity metadata. It does not read Keychain item contents, collect process arguments or passwords, enter credentials, approve dialogs, or send telemetry. It needs no root privileges, Accessibility permission, or Screen Recording permission.
+觀察程式會讀取視窗所屬行程與位置等中繼資料、特定的本機系統記錄，以及行程身分的中繼資料。它不會讀取鑰匙圈項目內容、蒐集行程引數或密碼、輸入憑證、代為允許存取要求，或傳送遙測資料。它不需要 root 權限、「輔助使用」權限或「螢幕錄製」權限。
 
-CLI output and local status logs can contain executable paths, process names, and job labels. Review them before sharing. Do not upload raw system logs, Keychain files, or screenshots containing private information.
+命令列介面（CLI）的輸出與本機狀態記錄可能包含執行檔路徑、行程名稱及工作標籤。分享前請先檢查。請勿上傳原始系統記錄、鑰匙圈檔案，或含有私人資訊的螢幕截圖。
 
-## Verify and contribute
+## 驗證與貢獻
 
 ```bash
 /usr/bin/python3 scripts/test_kcwho.py
@@ -71,6 +75,6 @@ scripts/install.sh build
 bash -n scripts/install.sh
 ```
 
-The regression fixtures are sanitized examples of captured securityd message shapes. They test stale helper activity, unrelated prompts, unknown clients, query lifetime, multiple requests, PID reuse, source/boot checks, missing evidence, and argument privacy. They do not replace live native-dialog testing. See [docs/verification.md](docs/verification.md) for the manual protocol and tested limits.
+迴歸測試資料取自實際擷取的 `securityd` 訊息格式範例，且已移除敏感資訊。測試涵蓋過期的輔助程式活動、無關的提示、未知的用戶端、查詢生命週期、多項要求、PID 重複使用、來源與開機狀態檢查、證據缺漏，以及引數隱私。這些測試不能取代實際原生對話框的測試。手動驗證流程與已測試的限制，請參閱 [驗證說明](docs/verification.md)。
 
-Report ordinary bugs or questions through [GitHub issues](https://github.com/andrew54068/kcwho/issues). For vulnerabilities, see [SECURITY.md](SECURITY.md). Development guidance is in [CONTRIBUTING.md](CONTRIBUTING.md); participants follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+一般錯誤或問題請透過 [GitHub Issues](https://github.com/andrew54068/kcwho/issues) 回報。資安漏洞的回報方式請參閱 [安全性政策](SECURITY.md)。開發指引請參閱 [貢獻指南](CONTRIBUTING.md)；所有參與者都應遵守 [行為準則](CODE_OF_CONDUCT.md)。
